@@ -34,7 +34,7 @@ void PrintList(list *l) {
             PrintList(l->rest);
             printcb;
         }
-        else printf("%g ",l->value);
+        else printf("%g",l->value);
     }
 }
 
@@ -126,18 +126,63 @@ list *Multiply(list *one, list *two) {
     }
 }
 
+symbol *symbol_table = NULL;
+
+symbol *FindSymbol(char *name) {
+    symbol *current = symbol_table;
+    while (current) {
+        if (strcmp(current->name, name) == 0) {
+            return current;
+        }
+        current = current->next;
+    }
+    return NULL;
+}
+
+void AddSymbol(char *name, list *value) {
+    symbol *existing = FindSymbol(name);
+    if (existing) {
+        FreeRecursive(existing->value);
+        existing->value = value;
+    } else {
+        symbol *new_symbol = (symbol *)malloc(sizeof(symbol));
+        if (!new_symbol) {
+            error(-1, errno, "Allocation failed for new symbol.");
+            return;
+        }
+        new_symbol->name = strdup(name);
+        new_symbol->value = value;
+        new_symbol->next = symbol_table;
+        symbol_table = new_symbol;
+    }
+}
+
+void FreeSymbolTable() {
+    symbol *current = symbol_table;
+    while (current) {
+        symbol *next = current->next;
+        free(current->name);
+        FreeRecursive(current->value);
+        free(current);
+        current = next;
+    }
+    symbol_table = NULL;
+}
+
 list *lst; /* for debugging. temp. */
 
 %}
 
-%token NUM
+%token NUM VAR
 
 %%
 LINES       :   LINES LINE
             |
             ;
 
-LINE        :   EXPR '\n'                       { printlist($1); }
+LINE        :   VAR '\n'                        { printf("="); printlist(FindSymbol($1->name)->value); }
+            |   EXPR '\n'                       { printlist($1); }
+            |   VAR '=' EXPR '\n'               { AddSymbol($1->name,$3); }
             |   '\n'
             ;
 
@@ -149,6 +194,7 @@ TERM        :   TERM    '*'     FACTOR          { PrintList($1); printf("*"); Pr
             ;
 FACTOR      :   '('     EXPR    ')'             { $$ = $2; }
             |   NUM                             { $$ = yylval; }
+            |   VAR                             { $$ = NewNode(); $$ = FindSymbol($1->name)->value; }
             |   '['     LIST    ']'             { $$ = $2; }
             ;
 LIST        :   NUM     EXTEND                  { $$ = NewNode(); $$->first = $1; $$->rest = $2; }
@@ -161,6 +207,6 @@ EXTEND      :   LIST                            { $$ = $1; }
 
 int main(int argc, char *argv[])
 {
-yyparse();
-return 0;
+    yyparse();
+    return 0;
 }
